@@ -140,6 +140,116 @@ func TestUploadKeepsLowConfidencePending(t *testing.T) {
 	}
 }
 
+type countingEmbed struct {
+	calls int
+}
+
+func (e *countingEmbed) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	e.calls++
+	return fakeEmbed{}.Embed(context.Background(), texts)
+}
+
+func TestSameNameAndChecksumSkipsRewrite(t *testing.T) {
+	mem := store.NewMemory()
+	embedder := &countingEmbed{}
+	handler := Server{Store: mem, Pipeline: pipeline.Pipeline{
+		Store:          mem,
+		Embed:          embedder,
+		Extract:        extract.Extractor{Chat: fakeChat{confidence: 0.95}},
+		Tables:         []string{"country"},
+		MinConfidence:  0.8,
+		ChunksPerTable: 2,
+		ChunkRunes:     800,
+		ChunkOverlap:   50,
+	}}.Handler()
+	body := "Spain is a country with code ES."
+	first := upload(t, handler, body)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first %d %s", first.Code, first.Body.String())
+	}
+	var created pipeline.Uploaded
+	if err := json.Unmarshal(first.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	second := upload(t, handler, body)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second %d %s", second.Code, second.Body.String())
+	}
+	var again pipeline.Uploaded
+	if err := json.Unmarshal(second.Body.Bytes(), &again); err != nil {
+		t.Fatal(err)
+	}
+	if !again.Unchanged || again.Replaced || again.File.ID != created.File.ID || again.File.Checksum == "" {
+		t.Fatalf("%#v", again)
+	}
+	if embedder.calls != 1 {
+		t.Fatalf("embed calls %d", embedder.calls)
+	}
+	chunks, err := mem.ListChunksByFile(context.Background(), created.File.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("chunks %#v", chunks)
+	}
+	files, err := mem.ListFiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files %#v", files)
+	}
+}
+
+func TestSameNameNewChecksumRebuildsChunks(t *testing.T) {
+	mem := store.NewMemory()
+	handler := Server{Store: mem, Pipeline: pipeline.Pipeline{
+		Store:          mem,
+		Embed:          fakeEmbed{},
+		Extract:        extract.Extractor{Chat: fakeChat{confidence: 0.95}},
+		Tables:         []string{"country"},
+		MinConfidence:  0.8,
+		ChunksPerTable: 2,
+		ChunkRunes:     800,
+		ChunkOverlap:   50,
+	}}.Handler()
+	first := upload(t, handler, "Spain is a country with code ES.")
+	var created pipeline.Uploaded
+	if err := json.Unmarshal(first.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	second := upload(t, handler, "Portugal is a country with code PT.")
+	if second.Code != http.StatusOK {
+		t.Fatalf("second %d %s", second.Code, second.Body.String())
+	}
+	var replaced pipeline.Uploaded
+	if err := json.Unmarshal(second.Body.Bytes(), &replaced); err != nil {
+		t.Fatal(err)
+	}
+	if !replaced.Replaced || replaced.Unchanged || replaced.File.ID != created.File.ID {
+		t.Fatalf("%#v", replaced)
+	}
+	if replaced.File.Checksum == created.File.Checksum {
+		t.Fatal("checksum did not change")
+	}
+	chunks, err := mem.ListChunksByFile(context.Background(), created.File.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 1 || !strings.Contains(chunks[0].Content, "Portugal") || strings.Contains(chunks[0].Content, "Spain") {
+		t.Fatalf("chunks %#v", chunks)
+	}
+	hits, err := mem.SearchChunks(context.Background(), []float32{0, 1}, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hit := range hits {
+		if strings.Contains(hit.Content, "Spain") {
+			t.Fatalf("old chunk still searchable: %#v", hit)
+		}
+	}
+}
+
 func TestDeleteFile(t *testing.T) {
 	handler, _ := newTestServer(0.95)
 	res := upload(t, handler, "Spain is a country with code ES.")

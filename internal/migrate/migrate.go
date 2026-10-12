@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
+	"sort"
 	"strings"
 )
 
@@ -11,9 +13,19 @@ import (
 var files embed.FS
 
 func Statements() ([]string, error) {
-	raw, err := files.ReadFile("migrations/001_init.sql")
+	names, err := fs.Glob(files, "migrations/*.sql")
 	if err != nil {
 		return nil, err
+	}
+	sort.Strings(names)
+	var raw []byte
+	for _, name := range names {
+		body, err := files.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+		raw = append(raw, '\n')
+		raw = append(raw, body...)
 	}
 	var statements []string
 	var current strings.Builder
@@ -77,7 +89,7 @@ func Statements() ([]string, error) {
 		statements = append(statements, stmt)
 	}
 	if len(statements) == 0 {
-		return nil, fmt.Errorf("migration 001_init.sql has no statements")
+		return nil, fmt.Errorf("migrations have no statements")
 	}
 	return statements, nil
 }

@@ -96,11 +96,11 @@ func (c *ClickHouse) insertFileVersion(ctx context.Context, file File, deleted u
 		return err
 	}
 	batch, err := c.admin.PrepareBatch(ctx, `INSERT INTO rag.files
-		(file_id, filename, content_type, status, byte_size, deleted, created_at, updated_at)`)
+		(file_id, filename, content_type, status, byte_size, checksum, deleted, created_at, updated_at)`)
 	if err != nil {
 		return err
 	}
-	if err := batch.Append(id, file.Filename, file.ContentType, file.Status, file.ByteSize, deleted, file.CreatedAt, file.UpdatedAt); err != nil {
+	if err := batch.Append(id, file.Filename, file.ContentType, file.Status, file.ByteSize, file.Checksum, deleted, file.CreatedAt, file.UpdatedAt); err != nil {
 		return err
 	}
 	return batch.Send()
@@ -114,6 +114,7 @@ func (c *ClickHouse) ListFiles(ctx context.Context) ([]File, error) {
 			argMax(content_type, updated_at),
 			argMax(status, updated_at),
 			argMax(byte_size, updated_at),
+			argMax(checksum, updated_at),
 			argMax(deleted, updated_at),
 			min(created_at),
 			max(updated_at)
@@ -148,6 +149,7 @@ func (c *ClickHouse) GetFile(ctx context.Context, id string) (File, error) {
 			argMax(content_type, updated_at),
 			argMax(status, updated_at),
 			argMax(byte_size, updated_at),
+			argMax(checksum, updated_at),
 			argMax(deleted, updated_at),
 			min(created_at),
 			max(updated_at)
@@ -171,13 +173,44 @@ func (c *ClickHouse) GetFile(ctx context.Context, id string) (File, error) {
 	return file, rows.Err()
 }
 
+func (c *ClickHouse) FindByFilename(ctx context.Context, filename string) (File, error) {
+	rows, err := c.admin.Query(ctx, `
+		SELECT
+			file_id,
+			argMax(filename, updated_at),
+			argMax(content_type, updated_at),
+			argMax(status, updated_at),
+			argMax(byte_size, updated_at),
+			argMax(checksum, updated_at),
+			argMax(deleted, updated_at),
+			min(created_at),
+			max(updated_at)
+		FROM rag.files
+		GROUP BY file_id
+		HAVING argMax(deleted, updated_at) = 0 AND argMax(filename, updated_at) = ?
+		ORDER BY max(updated_at) DESC
+		LIMIT 1`, filename)
+	if err != nil {
+		return File{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return File{}, ErrNotFound
+	}
+	file, _, err := scanFile(rows)
+	if err != nil {
+		return File{}, err
+	}
+	return file, rows.Err()
+}
+
 func scanFile(rows interface{ Scan(dest ...any) error }) (File, uint8, error) {
 	var (
 		file    File
 		id      uuid.UUID
 		deleted uint8
 	)
-	if err := rows.Scan(&id, &file.Filename, &file.ContentType, &file.Status, &file.ByteSize, &deleted, &file.CreatedAt, &file.UpdatedAt); err != nil {
+	if err := rows.Scan(&id, &file.Filename, &file.ContentType, &file.Status, &file.ByteSize, &file.Checksum, &deleted, &file.CreatedAt, &file.UpdatedAt); err != nil {
 		return File{}, 0, err
 	}
 	file.ID = id.String()
@@ -203,12 +236,65 @@ func (c *ClickHouse) DeleteFile(ctx context.Context, id string) error {
 	return c.insertFileVersion(ctx, file, 1)
 }
 
+func (c *ClickHouse) DeleteChunks(ctx context.Context, fileID string) error {
+	id, err := uuid.Parse(fileID)
+	if err != nil {
+		return err
+	}
+	rows, err := c.admin.Query(ctx, `
+		SELECT chunk_index, argMax(content, created_at), argMax(embedding, created_at), argMax(deleted, created_at) AS is_deleted, max(created_at)
+		FROM rag.chunks
+		WHERE file_id = ?
+		GROUP BY file_id, chunk_index
+		HAVING is_deleted = 0`, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type live struct {
+		index     uint32
+		content   string
+		embedding []float32
+		created   time.Time
+	}
+	var chunks []live
+	for rows.Next() {
+		var item live
+		var deleted uint8
+		if err := rows.Scan(&item.index, &item.content, &item.embedding, &deleted, &item.created); err != nil {
+			return err
+		}
+		chunks = append(chunks, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(chunks) == 0 {
+		return nil
+	}
+	batch, err := c.admin.PrepareBatch(ctx, `INSERT INTO rag.chunks
+		(file_id, chunk_index, content, embedding, deleted, created_at)`)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range chunks {
+		stamp := time.Now().UTC()
+		if !chunk.created.Before(stamp) {
+			stamp = chunk.created.Add(time.Millisecond)
+		}
+		if err := batch.Append(id, chunk.index, chunk.content, chunk.embedding, uint8(1), stamp); err != nil {
+			return err
+		}
+	}
+	return batch.Send()
+}
+
 func (c *ClickHouse) ReplaceChunks(ctx context.Context, fileID string, chunks []Chunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
 	batch, err := c.admin.PrepareBatch(ctx, `INSERT INTO rag.chunks
-		(file_id, chunk_index, content, embedding, created_at)`)
+		(file_id, chunk_index, content, embedding, deleted, created_at)`)
 	if err != nil {
 		return err
 	}
@@ -217,7 +303,7 @@ func (c *ClickHouse) ReplaceChunks(ctx context.Context, fileID string, chunks []
 		if err != nil {
 			return err
 		}
-		if err := batch.Append(id, chunk.ChunkIndex, chunk.Content, chunk.Embedding, chunk.CreatedAt); err != nil {
+		if err := batch.Append(id, chunk.ChunkIndex, chunk.Content, chunk.Embedding, uint8(0), chunk.CreatedAt); err != nil {
 			return err
 		}
 	}
@@ -237,6 +323,7 @@ func (c *ClickHouse) ListChunksByFile(ctx context.Context, fileID string, limit 
 		FROM rag.chunks
 		WHERE file_id = ?
 		GROUP BY file_id, chunk_index
+		HAVING argMax(deleted, created_at) = 0
 		ORDER BY chunk_index
 		LIMIT ?`, id, uint32(limit))
 	if err != nil {
@@ -264,12 +351,17 @@ func (c *ClickHouse) SearchChunks(ctx context.Context, embedding []float32, limi
 	}
 	rows, err := c.reader.Query(ctx, `
 		SELECT file_id, chunk_index, content, cosineDistance(embedding, ?) AS distance
-		FROM rag.chunks
-		WHERE (file_id, chunk_index, created_at) IN (
-			SELECT file_id, chunk_index, max(created_at)
+		FROM (
+			SELECT
+				file_id,
+				chunk_index,
+				argMax(content, created_at) AS content,
+				argMax(embedding, created_at) AS embedding,
+				argMax(deleted, created_at) AS deleted
 			FROM rag.chunks
 			GROUP BY file_id, chunk_index
 		)
+		WHERE deleted = 0
 		AND file_id IN (
 			SELECT file_id FROM rag.files GROUP BY file_id HAVING argMax(deleted, updated_at) = 0
 		)

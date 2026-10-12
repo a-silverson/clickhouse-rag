@@ -67,7 +67,11 @@ func (s Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, uploaded)
+	code := http.StatusCreated
+	if uploaded.Unchanged || uploaded.Replaced {
+		code = http.StatusOK
+	}
+	writeJSON(w, code, uploaded)
 }
 
 func (s Server) deleteFile(w http.ResponseWriter, r *http.Request) {

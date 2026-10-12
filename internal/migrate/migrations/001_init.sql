@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS rag.files (
     content_type LowCardinality(String),
     status LowCardinality(String),
     byte_size UInt64,
+    checksum String,
     deleted UInt8,
     created_at DateTime64(3, 'UTC'),
     updated_at DateTime64(3, 'UTC')
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS rag.chunks (
     chunk_index UInt32,
     content String,
     embedding Array(Float32),
+    deleted UInt8,
     created_at DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(created_at)

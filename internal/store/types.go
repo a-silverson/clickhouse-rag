@@ -14,6 +14,7 @@ type File struct {
 	ContentType string    `json:"content_type"`
 	Status      string    `json:"status"`
 	ByteSize    uint64    `json:"byte_size"`
+	Checksum    string    `json:"checksum"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -48,9 +49,11 @@ type Store interface {
 	InsertFile(ctx context.Context, file File) error
 	ListFiles(ctx context.Context) ([]File, error)
 	GetFile(ctx context.Context, id string) (File, error)
+	FindByFilename(ctx context.Context, filename string) (File, error)
 	MarkFile(ctx context.Context, id, status string) error
 	DeleteFile(ctx context.Context, id string) error
 
+	DeleteChunks(ctx context.Context, fileID string) error
 	ReplaceChunks(ctx context.Context, fileID string, chunks []Chunk) error
 	ListChunksByFile(ctx context.Context, fileID string, limit int) ([]Chunk, error)
 	SearchChunks(ctx context.Context, embedding []float32, limit int) ([]Hit, error)

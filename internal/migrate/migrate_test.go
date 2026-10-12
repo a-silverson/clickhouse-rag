@@ -16,8 +16,11 @@ func TestStatementsCoverTables(t *testing.T) {
 			t.Fatalf("missing %s", name)
 		}
 	}
-	if strings.Contains(strings.ToUpper(joined), "ALTER TABLE") {
+	if strings.Contains(strings.ToUpper(joined), "ALTER TABLE") && strings.Contains(strings.ToUpper(joined), " UPDATE ") {
 		t.Fatal("migration must not use ALTER TABLE UPDATE")
+	}
+	if !strings.Contains(joined, "checksum") {
+		t.Fatal("missing file checksum column")
 	}
 	if strings.Contains(joined, "Nullable(") {
 		t.Fatal("migration should use defaults instead of Nullable")

@@ -2,7 +2,10 @@ package pipeline
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,21 +35,51 @@ type Pipeline struct {
 type Uploaded struct {
 	File        store.File         `json:"file"`
 	Extractions []store.Extraction `json:"extractions"`
+	Unchanged   bool               `json:"unchanged"`
+	Replaced    bool               `json:"replaced"`
 }
 
 func (p Pipeline) Ingest(ctx context.Context, filename, contentType string, body []byte) (Uploaded, error) {
+	sum := sha256.Sum256(body)
+	checksum := hex.EncodeToString(sum[:])
 	now := time.Now().UTC()
-	file := store.File{
-		ID:          uuid.NewString(),
-		Filename:    filename,
-		ContentType: contentType,
-		Status:      "processing",
-		ByteSize:    uint64(len(body)),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+	existing, err := p.Store.FindByFilename(ctx, filename)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return Uploaded{}, err
+	}
+	replaced := false
+	var file store.File
+	if err == nil {
+		if existing.Checksum == checksum {
+			return Uploaded{File: existing, Unchanged: true}, nil
+		}
+		file = existing
+		file.ContentType = contentType
+		file.Status = "processing"
+		file.ByteSize = uint64(len(body))
+		file.Checksum = checksum
+		file.UpdatedAt = now
+		replaced = true
+	} else {
+		file = store.File{
+			ID:          uuid.NewString(),
+			Filename:    filename,
+			ContentType: contentType,
+			Status:      "processing",
+			ByteSize:    uint64(len(body)),
+			Checksum:    checksum,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
 	}
 	if err := p.Store.InsertFile(ctx, file); err != nil {
 		return Uploaded{}, err
+	}
+	if replaced {
+		if err := p.Store.DeleteChunks(ctx, file.ID); err != nil {
+			_ = p.Store.MarkFile(ctx, file.ID, "failed")
+			return Uploaded{}, err
+		}
 	}
 	text := chunk.TextFromUpload(filename, contentType, body)
 	parts := chunk.Split(text, p.ChunkRunes, p.ChunkOverlap)
@@ -62,7 +95,8 @@ func (p Pipeline) Ingest(ctx context.Context, filename, contentType string, body
 		return Uploaded{}, err
 	}
 	chunks := make([]store.Chunk, len(parts))
-	created := time.Now().UTC()
+	// Tombstones use the current millisecond. New chunks must sort after them.
+	created := time.Now().UTC().Add(time.Second)
 	for i, part := range parts {
 		chunks[i] = store.Chunk{
 			FileID:     file.ID,
@@ -103,7 +137,7 @@ func (p Pipeline) Ingest(ctx context.Context, filename, contentType string, body
 	}
 	file.Status = "extracted"
 	file.UpdatedAt = time.Now().UTC()
-	return Uploaded{File: file, Extractions: saved}, nil
+	return Uploaded{File: file, Extractions: saved, Replaced: replaced}, nil
 }
 
 func (p Pipeline) saveExtraction(ctx context.Context, fileID, tableName string, result extract.Result) (store.Extraction, error) {

@@ -64,6 +64,26 @@ func (m *Memory) GetFile(_ context.Context, id string) (File, error) {
 	return file, nil
 }
 
+func (m *Memory) FindByFilename(_ context.Context, filename string) (File, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var found File
+	var ok bool
+	for id, file := range m.files {
+		if m.deleted[id] || file.Filename != filename {
+			continue
+		}
+		if !ok || file.UpdatedAt.After(found.UpdatedAt) {
+			found = file
+			ok = true
+		}
+	}
+	if !ok {
+		return File{}, ErrNotFound
+	}
+	return found, nil
+}
+
 func (m *Memory) MarkFile(_ context.Context, id, status string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -84,6 +104,13 @@ func (m *Memory) DeleteFile(_ context.Context, id string) error {
 		return ErrNotFound
 	}
 	m.deleted[id] = true
+	return nil
+}
+
+func (m *Memory) DeleteChunks(_ context.Context, fileID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.chunks, fileID)
 	return nil
 }
 

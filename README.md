@@ -13,10 +13,11 @@ cp .env.example .env
 go run ./cmd/rag-service
 ```
 
-При `AUTO_MIGRATE=true` сервис сам применяет `internal/migrate/migrations/001_init.sql`. Тот же файл можно применить вручную:
+При `AUTO_MIGRATE=true` сервис сам применяет SQL из `internal/migrate/migrations` по порядку имени. Те же файлы можно применить вручную:
 
 ```bash
 clickhousectl local client --name dev --queries-file internal/migrate/migrations/001_init.sql
+clickhousectl local client --name dev --queries-file internal/migrate/migrations/002_file_checksum.sql
 ```
 
 MCP для LibreChat: HTTP `POST /mcp` или `go run ./cmd/rag-service -mcp-stdio`.
@@ -60,7 +61,7 @@ GRANT SELECT, INSERT ON rag.* TO mcp_writer;
 ## HTTP API
 
 - `GET /api/files` — файлы базы знаний
-- `POST /api/files` — multipart-поле `file`. Текст и JSON читаются как есть. Из PDF забираются печатные фрагменты. Загрузка сразу считает эмбеддинги и запускает экстракцию
+- `POST /api/files` — multipart-поле `file`. Текст и JSON читаются как есть. Из PDF забираются печатные фрагменты. Загрузка сразу считает эмбеддинги и запускает экстракцию. Если имя уже есть, сравнивается SHA-256 содержимого. Та же сумма возвращает существующий файл и ничего не переписывает. Другая сумма удаляет чанки этого файла новой версией `deleted = 1` и создаёт их заново
 - `DELETE /api/files/{file_id}` — мягкое удаление новой версией строки, без `ALTER DELETE`
 - `GET /api/extractions` — ожидающие экстракции
 - `POST /api/extractions/{id}/approve` — записать строки и пометить `approved`
