@@ -1,0 +1,11 @@
+<clickhouse>
+  <!-- The image limits user default to container localhost when no password is set.
+       Host connections arrive from the Docker bridge, so local development allows any network. -->
+  <users>
+    <default>
+      <networks replace="replace">
+        <ip>::/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
