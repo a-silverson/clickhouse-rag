@@ -6,17 +6,20 @@ Go RAG-сервис для базы знаний и экстракции мик�
 
 ## Запуск
 
-Локальный ClickHouse должен слушать `127.0.0.1:9000`. Ollama — `127.0.0.1:11434`, с моделью из `OLLAMA_EMBED_MODEL` (по умолчанию `nomic-embed-text`, 768 измерений).
+Локальный ClickHouse слушает native-порт `127.0.0.1:9000` и HTTP `127.0.0.1:8123`. Пользователь `default` без пароля. Ollama — `127.0.0.1:11434`, с моделью из `OLLAMA_EMBED_MODEL` (по умолчанию `nomic-embed-text`, 768 измерений).
 
 ```bash
+docker compose up -d
 cp .env.example .env
 go run ./cmd/rag-service
 ```
 
+`docker compose up -d` поднимает ClickHouse и создаёт базу `rag`. При `AUTO_MIGRATE=true` сервис сам создаёт таблицы. Остановить сервер: `docker compose down`. Данные остаются в томе `clickhouse-data`.
+
 При `AUTO_MIGRATE=true` сервис применяет `internal/migrate/migrations/001_init.sql`. Тот же файл можно применить вручную:
 
 ```bash
-clickhousectl local client --name dev --queries-file internal/migrate/migrations/001_init.sql
+docker compose exec -T clickhouse clickhouse-client --multiquery < internal/migrate/migrations/001_init.sql
 ```
 
 MCP для LibreChat: HTTP `POST /mcp` или `go run ./cmd/rag-service -mcp-stdio`.
