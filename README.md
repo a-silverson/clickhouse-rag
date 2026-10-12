@@ -69,6 +69,12 @@ GRANT SELECT, INSERT ON rag.* TO mcp_writer;
 - `POST /api/extractions/{id}/approve` — записать строки и пометить `approved`
 - `POST /api/extractions/{id}/reject` — пометить `rejected`
 
+Все обычные файлы одной папки отправляет `scripts/upload-dir.sh`. Скрытые файлы и вложенные каталоги пропускаются. Адрес сервиса берётся из `RAG_API_URL`, по умолчанию `http://127.0.0.1:8080`.
+
+```bash
+scripts/upload-dir.sh ./docs
+```
+
 ## MCP
 
 - `search_knowledge_base` — эмбеддинг запроса через Ollama и ближайшие чанки
