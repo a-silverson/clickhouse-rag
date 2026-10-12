@@ -1,1 +1,4 @@
 .clickhouse/
+.env
+/rag-service
+
