@@ -4,9 +4,9 @@ import "testing"
 
 func TestValidateReadOnly(t *testing.T) {
 	allowed := []string{
-		"SELECT name FROM rag.country",
+		"SELECT name FROM rag.microservice",
 		"WITH c AS (SELECT 1 AS n) SELECT n FROM c",
-		"select code from rag.country where name = 'DROP'",
+		"select name from rag.microservice where name = 'DROP'",
 	}
 	for _, query := range allowed {
 		if err := ValidateReadOnly(query); err != nil {
@@ -14,11 +14,11 @@ func TestValidateReadOnly(t *testing.T) {
 		}
 	}
 	rejected := []string{
-		"INSERT INTO rag.country VALUES (1)",
-		"SELECT 1; DROP TABLE rag.country",
-		"DELETE FROM rag.country",
+		"INSERT INTO rag.microservice VALUES (1)",
+		"SELECT 1; DROP TABLE rag.microservice",
+		"DELETE FROM rag.microservice",
 		"SELECT * FROM system.tables",
-		"UPDATE rag.country SET name = 'x'",
+		"UPDATE rag.microservice SET name = 'x'",
 		"",
 	}
 	for _, query := range rejected {

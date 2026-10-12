@@ -16,50 +16,28 @@ type Table struct {
 
 var Tables = []Table{
 	{
-		Name: "country",
-		ID:   "country_id",
+		Name: "microservice",
+		ID:   "microservice_id",
 		Columns: []Column{
 			{Name: "name", Kind: "string", Required: true},
-			{Name: "code", Kind: "string", Required: true},
-		},
-	},
-	{
-		Name: "developer",
-		ID:   "developer_id",
-		Columns: []Column{
-			{Name: "name", Kind: "string", Required: true},
-			{Name: "country_id", Kind: "uuid", Required: true},
-		},
-	},
-	{
-		Name: "location",
-		ID:   "location_id",
-		Columns: []Column{
-			{Name: "name", Kind: "string", Required: true},
-			{Name: "country_id", Kind: "uuid", Required: true},
-			{Name: "city", Kind: "string", Required: true},
-		},
-	},
-	{
-		Name: "project",
-		ID:   "project_id",
-		Columns: []Column{
-			{Name: "name", Kind: "string", Required: true},
-			{Name: "developer_id", Kind: "uuid", Required: true},
-			{Name: "location_id", Kind: "uuid", Required: true},
-			{Name: "country_id", Kind: "uuid", Required: true},
 			{Name: "description", Kind: "string", Required: false},
 		},
 	},
 	{
-		Name: "apartments",
-		ID:   "apartment_id",
+		Name: "api",
+		ID:   "api_id",
 		Columns: []Column{
-			{Name: "project_id", Kind: "uuid", Required: true},
-			{Name: "unit_code", Kind: "string", Required: true},
-			{Name: "rooms", Kind: "uint8", Required: true},
-			{Name: "area_sqm", Kind: "float", Required: true},
-			{Name: "price_minor", Kind: "uint64", Required: true},
+			{Name: "microservice_id", Kind: "uuid", Required: true},
+			{Name: "name", Kind: "string", Required: true},
+			{Name: "description", Kind: "string", Required: false},
+		},
+	},
+	{
+		Name: "pulsar_topic",
+		ID:   "topic_id",
+		Columns: []Column{
+			{Name: "name", Kind: "string", Required: true},
+			{Name: "description", Kind: "string", Required: false},
 		},
 	},
 }

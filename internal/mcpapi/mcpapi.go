@@ -204,7 +204,7 @@ func tools() []map[string]any {
 			},
 			"required": []string{"query"},
 		}),
-		tool("search_projects", "Run one read-only SELECT against the real-estate tables.", map[string]any{
+		tool("search_projects", "Run one read-only SELECT against microservices, their APIs, and Pulsar topics.", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"sql": map[string]string{"type": "string"},

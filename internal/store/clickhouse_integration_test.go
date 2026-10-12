@@ -64,21 +64,29 @@ func TestClickHouseRoundTrip(t *testing.T) {
 		}
 	}
 
-	countryID := uuid.NewString()
-	if err := db.InsertEntity(ctx, "country", countryID, map[string]any{"name": "Spain", "code": "ES"}); err != nil {
+	serviceID := uuid.NewString()
+	if err := db.InsertEntity(ctx, "microservice", serviceID, map[string]any{"name": "billing", "description": "charges customers"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpdateEntity(ctx, "country", countryID, map[string]any{"name": "Espana"}); err != nil {
+	if err := db.UpdateEntity(ctx, "microservice", serviceID, map[string]any{"description": "takes payments"}); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.QueryReadOnly(ctx, "SELECT name, code FROM rag.country WHERE country_id = '"+countryID+"' ORDER BY updated_at DESC LIMIT 1")
+	topicID := uuid.NewString()
+	if err := db.InsertEntity(ctx, "pulsar_topic", topicID, map[string]any{"name": "persistent://public/default/charges"}); err != nil {
+		t.Fatal(err)
+	}
+	apiID := uuid.NewString()
+	if err := db.InsertEntity(ctx, "api", apiID, map[string]any{"microservice_id": serviceID, "name": "create charge"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.QueryReadOnly(ctx, "SELECT name, description FROM rag.microservice WHERE microservice_id = '"+serviceID+"' ORDER BY updated_at DESC LIMIT 1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0]["name"] != "Espana" || rows[0]["code"] != "ES" {
-		t.Fatalf("country rows %#v", rows)
+	if len(rows) != 1 || rows[0]["name"] != "billing" || rows[0]["description"] != "takes payments" {
+		t.Fatalf("microservice rows %#v", rows)
 	}
-	if _, err := db.QueryReadOnly(ctx, "DROP TABLE rag.country"); err == nil {
+	if _, err := db.QueryReadOnly(ctx, "DROP TABLE rag.microservice"); err == nil {
 		t.Fatal("writer SQL was accepted on the reader path")
 	}
 

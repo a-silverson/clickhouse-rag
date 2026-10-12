@@ -35,7 +35,7 @@ func (e Extractor) Extract(ctx context.Context, tableName string, chunks []strin
 		}
 		fields = append(fields, fmt.Sprintf("%s (%s, %s)", col.Name, col.Kind, req))
 	}
-	system := "You extract structured real-estate rows from source text. Reply with JSON only, no markdown. Shape: {\"confidence\":0.0,\"rows\":[{...}]}. confidence is your certainty from 0 to 1. Omit a row when the text does not support it. Use only these fields."
+	system := "You extract microservices, their APIs, and Pulsar topics from source text. Reply with JSON only, no markdown. Shape: {\"confidence\":0.0,\"rows\":[{...}]}. confidence is your certainty from 0 to 1. Omit a row when the text does not support it. Use only these fields."
 	user := fmt.Sprintf("Table %s fields: %s\n\nSource:\n%s", table.Name, strings.Join(fields, ", "), strings.Join(chunks, "\n---\n"))
 	raw, err := e.Chat.Chat(ctx, system, user)
 	if err != nil {
