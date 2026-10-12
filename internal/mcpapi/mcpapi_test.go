@@ -40,23 +40,23 @@ func TestSearchAndGuardedSQL(t *testing.T) {
 
 	denied := call(t, handler, "tools/call", map[string]any{
 		"name":      "search_projects",
-		"arguments": map[string]any{"sql": "DELETE FROM rag.country"},
+		"arguments": map[string]any{"sql": "DELETE FROM rag.microservice"},
 	})
 	if !strings.Contains(denied, "isError") && !strings.Contains(denied, "not allowed") && !strings.Contains(denied, "only SELECT") {
 		t.Fatalf("delete was not blocked: %s", denied)
 	}
 
 	created := call(t, handler, "tools/call", map[string]any{
-		"name": "create_country",
+		"name": "create_microservice",
 		"arguments": map[string]any{
-			"name": "Spain",
-			"code": "ES",
+			"name":        "billing",
+			"description": "charges customers",
 		},
 	})
-	if !strings.Contains(created, "country_id") {
+	if !strings.Contains(created, "microservice_id") {
 		t.Fatalf("create %s", created)
 	}
-	rows, err := mem.QueryReadOnly(context.Background(), "SELECT code FROM country")
+	rows, err := mem.QueryReadOnly(context.Background(), "SELECT name FROM microservice")
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows %#v err %v", rows, err)
 	}
@@ -65,7 +65,7 @@ func TestSearchAndGuardedSQL(t *testing.T) {
 func TestToolsListIncludesScopedWrites(t *testing.T) {
 	handler := Server{DB: store.NewMemory(), Embed: embedder{}}.Handler()
 	body := call(t, handler, "tools/list", map[string]any{})
-	for _, name := range []string{"search_knowledge_base", "search_projects", "create_apartments", "update_project"} {
+	for _, name := range []string{"search_knowledge_base", "search_projects", "create_api", "update_pulsar_topic"} {
 		if !strings.Contains(body, name) {
 			t.Fatalf("missing %s in %s", name, body)
 		}

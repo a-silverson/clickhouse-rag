@@ -1,6 +1,6 @@
 # clickhouse-rag
 
-Go RAG-сервис для базы знаний и экстракции объектов недвижимости. Векторы и строки хранятся в ClickHouse. Эмбеддинги считает Ollama. Извлечение структурированных строк может идти через Ollama или OpenAI (`LLM_PROVIDER`).
+Go RAG-сервис для базы знаний и экстракции микросервисов, их API и топиков Pulsar. Векторы и строки хранятся в ClickHouse. Эмбеддинги считает Ollama. Извлечение структурированных строк может идти через Ollama или OpenAI (`LLM_PROVIDER`).
 
 Образец `pet/sasha/rag-service` использовал PostgreSQL и внешний RAG API. Здесь поиск идёт по `cosineDistance` в ClickHouse, а роль внешнего RAG API выполняет Ollama `/api/embed`. HTTP-контракт и MCP-инструменты сохранены. Отдельный Next.js UI в этот репозиторий не переносился: его исходников не было, контракт для него — HTTP API ниже.
 
@@ -13,11 +13,10 @@ cp .env.example .env
 go run ./cmd/rag-service
 ```
 
-При `AUTO_MIGRATE=true` сервис сам применяет SQL из `internal/migrate/migrations` по порядку имени. Те же файлы можно применить вручную:
+При `AUTO_MIGRATE=true` сервис применяет `internal/migrate/migrations/001_init.sql`. Тот же файл можно применить вручную:
 
 ```bash
 clickhousectl local client --name dev --queries-file internal/migrate/migrations/001_init.sql
-clickhousectl local client --name dev --queries-file internal/migrate/migrations/002_file_checksum.sql
 ```
 
 MCP для LibreChat: HTTP `POST /mcp` или `go run ./cmd/rag-service -mcp-stdio`.
@@ -40,7 +39,7 @@ MCP для LibreChat: HTTP `POST /mcp` или `go run ./cmd/rag-service -mcp-std
 | `OPENAI_API_KEY` | пусто | Обязателен при `LLM_PROVIDER=openai` |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Модель экстракции OpenAI |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Базовый URL OpenAI |
-| `EXTRACTION_TABLES` | `country,developer,location,project,apartments` | Таблицы экстракции |
+| `EXTRACTION_TABLES` | `microservice,api,pulsar_topic` | Таблицы экстракции |
 | `EXTRACTION_MIN_CONFIDENCE` | `0.8` | Порог авто-INSERT. Ниже — экстракция остаётся `pending` |
 | `EXTRACTION_CHUNKS_PER_TABLE` | `3` | Сколько чанков отдавать модели на таблицу |
 | `CHUNK_RUNES` / `CHUNK_OVERLAP` | `800` / `100` | Нарезка текста |
@@ -71,13 +70,13 @@ GRANT SELECT, INSERT ON rag.* TO mcp_writer;
 
 - `search_knowledge_base` — эмбеддинг запроса через Ollama и ближайшие чанки
 - `search_projects` — один `SELECT` или `WITH`. `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `DROP`, `SYSTEM` и второе выражение запрещены
-- `create_*` / `update_*` для `country`, `developer`, `location`, `project`, `apartments`
+- `create_*` / `update_*` для `microservice`, `api`, `pulsar_topic`
 
-`update_*` вставляет новую версию `ReplacingMergeTree`, а не `ALTER TABLE UPDATE`. `price_minor` у квартиры — цена в минимальных единицах, целое `UInt64`.
+`update_*` вставляет новую версию `ReplacingMergeTree`, а не `ALTER TABLE UPDATE`. У `api` обязательна связь `microservice_id`. Пустое `description` значит, что описания нет.
 
 ## Схема
 
-`ORDER BY` выбран по точечным чтениям: `file_id`, `(file_id, chunk_index)`, `extraction_id` и id сущности. Партиций нет: срока хранения у этих таблиц нет. Повторяющиеся статусы и коды стран имеют тип `LowCardinality(String)`. Nullable нет.
+`ORDER BY` выбран по точечным чтениям: `file_id`, `(file_id, chunk_index)`, `extraction_id`, `microservice_id`, `api_id`, `topic_id`. Список API сервиса фильтрует `microservice_id` уже после точечного ключа `api_id`. Партиций нет: срока хранения у этих таблиц нет. Повторяющиеся статусы имеют тип `LowCardinality(String)`. Nullable нет. Имена и описания остаются `String`: это не повторяющийся словарь.
 
 ## Проверки
 

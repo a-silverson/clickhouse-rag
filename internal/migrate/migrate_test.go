@@ -11,13 +11,16 @@ func TestStatementsCoverTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(statements, "\n")
-	for _, name := range []string{"rag.files", "rag.chunks", "rag.extractions", "rag.country", "rag.developer", "rag.location", "rag.project", "rag.apartments"} {
+	for _, name := range []string{"rag.files", "rag.chunks", "rag.extractions", "rag.microservice", "rag.api", "rag.pulsar_topic"} {
 		if !strings.Contains(joined, name) {
 			t.Fatalf("missing %s", name)
 		}
 	}
-	if strings.Contains(strings.ToUpper(joined), "ALTER TABLE") && strings.Contains(strings.ToUpper(joined), " UPDATE ") {
-		t.Fatal("migration must not use ALTER TABLE UPDATE")
+	if strings.Contains(joined, "rag.country") || strings.Contains(joined, "rag.apartments") {
+		t.Fatal("real-estate tables must not remain in the migration")
+	}
+	if strings.Contains(strings.ToUpper(joined), "ALTER TABLE") {
+		t.Fatal("migration must be a single create script, not ALTER TABLE")
 	}
 	if !strings.Contains(joined, "checksum") {
 		t.Fatal("missing file checksum column")

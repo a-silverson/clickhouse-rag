@@ -15,7 +15,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.OllamaEmbedModel != "nomic-embed-text" || cfg.OllamaEmbedDimensions != 768 {
 		t.Fatalf("embed config %+v", cfg)
 	}
-	if len(cfg.ExtractionTables) != 5 {
+	if len(cfg.ExtractionTables) != 3 || cfg.ExtractionTables[0] != "microservice" || cfg.ExtractionTables[2] != "pulsar_topic" {
 		t.Fatalf("tables %#v", cfg.ExtractionTables)
 	}
 }

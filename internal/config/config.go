@@ -83,7 +83,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AUTO_MIGRATE: %w", err)
 		}
 	}
-	cfg.ExtractionTables = splitList(env("EXTRACTION_TABLES", "country,developer,location,project,apartments"))
+	cfg.ExtractionTables = splitList(env("EXTRACTION_TABLES", "microservice,api,pulsar_topic"))
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}

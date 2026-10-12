@@ -45,7 +45,7 @@ func newTestServer(confidence float64) (http.Handler, *store.Memory) {
 		Store:          mem,
 		Embed:          fakeEmbed{},
 		Extract:        extract.Extractor{Chat: fakeChat{confidence: confidence}},
-		Tables:         []string{"country"},
+		Tables:         []string{"microservice"},
 		MinConfidence:  0.8,
 		ChunksPerTable: 2,
 		ChunkRunes:     800,
@@ -91,7 +91,7 @@ func TestUploadAppliesHighConfidence(t *testing.T) {
 	if !strings.Contains(pending.Body.String(), "[]") {
 		t.Fatalf("pending %s", pending.Body.String())
 	}
-	if _, ok := mem.Row("country", ""); ok {
+	if _, ok := mem.Row("microservice", ""); ok {
 		t.Fatal("empty id should not exist")
 	}
 	files := httptest.NewRecorder()
@@ -120,18 +120,16 @@ func TestUploadKeepsLowConfidencePending(t *testing.T) {
 		t.Fatalf("approve %d %s", approve.Code, approve.Body.String())
 	}
 	found := false
-	// The generated id is inside the store; scan via a second list of countries through search is not on HTTP.
-	// Approve must have inserted exactly one country row. QueryReadOnly returns every row of the matched table.
-	rows, err := mem.QueryReadOnly(context.Background(), "SELECT name, code FROM rag.country")
+	rows, err := mem.QueryReadOnly(context.Background(), "SELECT name FROM rag.microservice")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0]["code"] != "ES" {
+	if len(rows) != 1 || rows[0]["name"] != "Spain" {
 		t.Fatalf("%#v", rows)
 	}
 	found = true
 	if !found {
-		t.Fatal("country was not inserted")
+		t.Fatal("microservice was not inserted")
 	}
 	reject := httptest.NewRecorder()
 	handler.ServeHTTP(reject, httptest.NewRequest(http.MethodPost, "/api/extractions/"+uploaded.Extractions[0].ID+"/reject", nil))
@@ -156,7 +154,7 @@ func TestSameNameAndChecksumSkipsRewrite(t *testing.T) {
 		Store:          mem,
 		Embed:          embedder,
 		Extract:        extract.Extractor{Chat: fakeChat{confidence: 0.95}},
-		Tables:         []string{"country"},
+		Tables:         []string{"microservice"},
 		MinConfidence:  0.8,
 		ChunksPerTable: 2,
 		ChunkRunes:     800,
@@ -207,7 +205,7 @@ func TestSameNameNewChecksumRebuildsChunks(t *testing.T) {
 		Store:          mem,
 		Embed:          fakeEmbed{},
 		Extract:        extract.Extractor{Chat: fakeChat{confidence: 0.95}},
-		Tables:         []string{"country"},
+		Tables:         []string{"microservice"},
 		MinConfidence:  0.8,
 		ChunksPerTable: 2,
 		ChunkRunes:     800,
